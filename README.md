@@ -8,7 +8,7 @@
 ![MITRE ATT&CK](https://img.shields.io/badge/MITRE_ATT%26CK-mapped-red)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-> Environnement SOC complet déployé sous VMware pour simuler, détecter et investiguer des attaques réelles —
+> Environnement SOC complet déployé sous VMware pour simuler, détecter et investiguer des attaques réelles 
 > Mimikatz, Pass-the-Hash, mouvement latéral — avec **Wazuh** comme SIEM/EDR et **Active Directory** comme cible.
 
 ---

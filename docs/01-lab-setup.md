@@ -141,10 +141,12 @@ Set-NetFirewallRule -DisplayName "Partage de fichiers et d'imprimantes (Demande 
 
 Test depuis DC01 :
 
-ping 192.168.100.20   # win10-client
-ping 192.168.100.30   # ubuntu-endpoint
-ping 192.168.100.50   # wazuh-server
-ping 8.8.8.8          # Internet
+```powershell
+ping 192.168.100.20
+ping 192.168.100.30
+ping 192.168.100.50
+ping 8.8.8.8
+```
 
 > ![Ping_DC01](https://raw.githubusercontent.com/samiBlsn/SOC-HomeLab/main/screenshots/ping_dc01.PNG) : Terminal montrant les pings réussis entre les VMs
 > (depuis DC01 vers les autres IPs)

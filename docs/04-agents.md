@@ -1,6 +1,11 @@
 # 04 — Déploiement des Agents Wazuh
 
 ## Objectif
+
+L'agent Wazuh est responsable de la collecte locale des événements
+(sécurité Windows, Sysmon, journaux Linux, intégrité fichiers, etc.)
+et de leur transmission sécurisée vers le Wazuh Manager pour analyse.
+
 Installer et enrôler l'agent Wazuh sur les 3 endpoints du lab (DC01, win10-client,
 ubuntu-endpoint) afin qu'ils remontent leurs logs au Wazuh Manager.
 

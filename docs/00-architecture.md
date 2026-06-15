@@ -13,7 +13,7 @@ L'objectif est de simuler des attaques réelles et de valider leur détection.
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                  VMware Workstation — Host                       │
-│              Ryzen 5 7700X — 32 Go RAM                          │
+│              Ryzen 7 5700X — 32 Go RAM                          │
 │                                                                  │
 │         VMnet2 — NAT Network — 192.168.100.0/24                 │
 │                        │                                         │
@@ -118,7 +118,7 @@ MITRE ATT&CK et ses règles de détection en XML le rendent idéal pour un lab
 portfolio.
 
 ### Pourquoi Active Directory ?
-AD est présent dans plus de 90% des entreprises. La grande majorité des
+Active Directory reste la solution d'annuaire la plus répandue dans les environnements Windows d'entreprise. La grande majorité des
 attaques ciblées (ransomware, APT) passent par une compromission de l'AD.
 Maîtriser sa configuration et la détection d'attaques AD (Pass-the-Hash,
 Kerberoasting, DCSync) est une compétence fondamentale pour un SOC analyst.
@@ -127,7 +127,7 @@ Kerberoasting, DCSync) est une compétence fondamentale pour un SOC analyst.
 VMware Workstation offre des performances supérieures à VirtualBox pour les
 labs multi-VMs, avec un meilleur support des réseaux virtuels isolés. Le mode
 NAT de VMnet2 permet un accès internet aux VMs tout en les isolant du réseau
-physique — indispensable pour des simulations d'attaques sécurisées.
+physique, indispensable pour des simulations d'attaques sécurisées.
 
 ### Pourquoi Ubuntu 22.04 pour Wazuh ?
 Wazuh supporte officiellement Ubuntu 22.04 LTS et c'est la distribution
@@ -138,7 +138,7 @@ sur la durée du projet.
 
 ## Périmètre de sécurité
 
-> ⚠️ Ce lab est **entièrement isolé** sur un réseau VMware NAT.
+> ⚠️ Ce lab est isolé du réseau physique via un réseau VMware NAT dédié.
 > Les attaques simulées (Mimikatz, Pass-the-Hash, etc.) ne sortent
 > jamais du réseau virtuel 192.168.100.0/24 et n'affectent pas
 > le réseau physique ou internet.

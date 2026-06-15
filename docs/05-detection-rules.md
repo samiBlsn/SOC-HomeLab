@@ -1,0 +1,302 @@
+# 05 — Règles de détection custom & Sysmon
+
+## Objectif
+Enrichir la télémétrie Windows avec Sysmon et créer des règles de détection
+custom dans Wazuh mappées au framework MITRE ATT&CK, couvrant les principales
+techniques d'attaque simulées dans ce lab.
+
+---
+
+## Pourquoi Sysmon ?
+
+Par défaut, Windows ne loggue pas suffisamment de détails pour détecter des
+attaques sophistiquées. Sysmon (System Monitor) est un driver Microsoft qui
+enrichit considérablement la télémétrie en ajoutant :
+
+| Event ID Sysmon | Ce qu'il détecte |
+|---|---|
+| 1 | Création de processus + ligne de commande complète |
+| 3 | Connexions réseau initiées par un processus |
+| 7 | Chargement de DLL |
+| 10 | **Accès à la mémoire d'un processus** ← clé pour Mimikatz |
+| 11 | Création de fichiers |
+| 13 | Modification de clés de registre |
+
+Sans Sysmon, Mimikatz peut s'exécuter sans qu'aucun log exploitable ne soit
+généré. Avec Sysmon, l'accès à la mémoire de `lsass.exe` est immédiatement
+visible via l'Event ID 10.
+
+---
+
+## 1. Installation de Sysmon
+
+Exécuté en **PowerShell 64 bits Administrateur** sur **DC01** et **win10-client** :
+
+```powershell
+# Téléchargement de Sysmon
+Invoke-WebRequest -Uri https://download.sysinternals.com/files/Sysmon.zip -OutFile C:\Sysmon.zip
+Expand-Archive -Path C:\Sysmon.zip -DestinationPath C:\Sysmon
+
+# Téléchargement de la config SwiftOnSecurity (standard industrie)
+Invoke-WebRequest -Uri https://raw.githubusercontent.com/SwiftOnSecurity/sysmon-config/master/sysmonconfig-export.xml -OutFile C:\Sysmon\sysmonconfig.xml
+
+# Installation
+C:\Sysmon\Sysmon64.exe -accepteula -i C:\Sysmon\sysmonconfig.xml
+```
+
+### Vérification
+
+```powershell
+Get-Service Sysmon64
+```
+
+> ![Sysmon_running](https://raw.githubusercontent.com/samiBlsn/SOC-HomeLab/main/screenshots/etape-5/Sysmon_running.PNG) : `Get-Service Sysmon64` affichant `Running` sur DC01.
+
+---
+
+## 2. Configuration Wazuh pour collecter les logs Sysmon
+
+Sur **wazuh-server**, ajout du canal Sysmon dans `/var/ossec/etc/ossec.conf` :
+
+```xml
+<localfile>
+  <location>Microsoft-Windows-Sysmon/Operational</location>
+  <log_format>eventchannel</log_format>
+</localfile>
+```
+
+```bash
+sudo systemctl restart wazuh-manager
+```
+
+---
+
+## 3. Règles de détection custom
+
+Les règles sont définies dans `/var/ossec/etc/rules/local_rules.xml`.
+Chaque règle est mappée à une technique MITRE ATT&CK et surveille
+des Event IDs Windows spécifiques.
+
+---
+
+### Règle 100001 — Mimikatz via nom de processus
+**MITRE** : T1003.001 — OS Credential Dumping / LSASS Memory
+**Niveau** : 15 (Critique)
+**Event ID surveillé** : Sysmon Event ID 1 (création de processus)
+
+**Raisonnement** : Cette règle détecte efficacement les exécutions directes de Mimikatz mais peut être contournée par le renommage de l'exécutable ou l'utilisation d'outils équivalents.
+
+```xml
+<rule id="100001" level="15">
+  <if_group>windows</if_group>
+  <field name="win.eventdata.image" type="pcre2">(?i)mimikatz</field>
+  <description>CRITIQUE - Mimikatz détecté via nom de processus</description>
+  <mitre>
+    <id>T1003.001</id>
+  </mitre>
+  <group>credential_access,mimikatz,</group>
+</rule>
+```
+
+---
+
+### Règle 100002 — Mimikatz via ligne de commande
+**MITRE** : T1003.001 — OS Credential Dumping / LSASS Memory
+**Niveau** : 15 (Critique)
+**Event ID surveillé** : Sysmon Event ID 1 (création de processus)
+
+**Raisonnement** : Même si l'attaquant renomme l'exécutable, les commandes
+Mimikatz (`sekurlsa::logonpasswords`, `lsadump::dcsync`, etc.) restent
+identifiables dans la ligne de commande. La regex couvre les modules
+les plus utilisés.
+
+```xml
+<rule id="100002" level="15">
+  <if_group>windows</if_group>
+  <field name="win.eventdata.commandLine" type="pcre2">(?i)(sekurlsa|lsadump|kerberos::|privilege::debug)</field>
+  <description>CRITIQUE - Arguments Mimikatz détectés en ligne de commande</description>
+  <mitre>
+    <id>T1003.001</id>
+  </mitre>
+  <group>credential_access,mimikatz,</group>
+</rule>
+```
+
+---
+
+### Règle 100003 — Accès mémoire LSASS
+**MITRE** : T1003.001 — OS Credential Dumping / LSASS Memory
+**Niveau** : 15 (Critique)
+**Event ID surveillé** : Sysmon Event ID 10 (accès mémoire inter-processus)
+
+**Raisonnement** : C'est la règle la plus robuste contre Mimikatz.
+`lsass.exe` stocke les credentials en mémoire. Tout processus qui accède
+à sa mémoire (hors processus système légitimes) est suspect. Sysmon Event ID 10
+est le seul moyen natif de détecter cet accès sans EDR commercial. 
+
+Note: Dans un environnement de production, cette règle nécessiterait une liste d'exclusion pour les outils de sécurité autorisés.
+
+```xml
+<rule id="100003" level="15">
+  <if_group>windows</if_group>
+  <field name="win.system.eventID">^10$</field>
+  <field name="win.eventdata.targetImage" type="pcre2">(?i)lsass\.exe</field>
+  <description>CRITIQUE - Accès mémoire LSASS détecté (credential dumping)</description>
+  <mitre>
+    <id>T1003.001</id>
+  </mitre>
+  <group>credential_access,lsass,</group>
+</rule>
+```
+
+---
+
+### Règle 100010 — Pass-the-Hash
+**MITRE** : T1550.002 — Use Alternate Authentication Material / Pass the Hash
+**Niveau** : 12 (Haut)
+**Event ID surveillé** : Windows Security Event ID 4624 (ouverture de session)
+
+**Raisonnement** : Le Pass-the-Hash génère une authentification réseau
+(Logon Type 3) via NTLM. Une authentification NTLM de type réseau provenant
+d'une workstation vers un serveur est légitime dans certains cas, mais devient
+suspecte combinée à d'autres indicateurs (heure inhabituelle, compte sensible).
+
+Cette règle est volontairement large et doit être corrélée
+avec d'autres indicateurs pour confirmer un véritable Pass-the-Hash.
+
+```xml
+<rule id="100010" level="12">
+  <if_group>windows</if_group>
+  <field name="win.system.eventID">^4624$</field>
+  <field name="win.eventdata.logonType">^3$</field>
+  <field name="win.eventdata.authenticationPackageName">^NTLM$</field>
+  <description>HAUT - Authentification NTLM réseau suspecte (Pass-the-Hash possible)</description>
+  <mitre>
+    <id>T1550.002</id>
+  </mitre>
+  <group>lateral_movement,pass_the_hash,</group>
+</rule>
+```
+
+---
+
+### Règle 100020 — Scan réseau
+**MITRE** : T1046 — Network Service Discovery
+**Niveau** : 10 (Moyen)
+**Logique** : 20 tentatives de connexion depuis la même IP en 10 secondes
+
+**Raisonnement** : Un scan Nmap génère des dizaines de tentatives de connexion
+TCP en quelques secondes depuis une même source. La corrélation temporelle
+(frequency + timeframe) permet de distinguer un scan d'un trafic normal.
+
+```xml
+<rule id="100020" level="10" frequency="20" timeframe="10">
+  <if_matched_group>connection_attempt</if_matched_group>
+  <same_field>win.eventdata.sourceAddress</same_field>
+  <description>MOYEN - Scan réseau détecté depuis la même IP source</description>
+  <mitre>
+    <id>T1046</id>
+  </mitre>
+  <group>reconnaissance,network_scan,</group>
+</rule>
+```
+
+---
+
+### Règle 100030 — Brute Force RDP
+**MITRE** : T1110.001 — Brute Force / Password Guessing
+**Niveau** : 12 (Haut)
+**Logique** : 5 échecs d'authentification depuis la même IP en 60 secondes
+
+**Raisonnement** : Un attaquant qui tente de deviner un mot de passe RDP
+génère des Event ID 4625 (échec de connexion) en rafale. Le seuil de 5 échecs
+en 60 secondes est suffisamment bas pour détecter une attaque tout en évitant
+les faux positifs liés aux erreurs de frappe normales (1-2 tentatives).
+
+Cette règle s'appuie sur la règle native Wazuh 60122,
+qui détecte les échecs d'authentification Windows (Event ID 4625).
+
+```xml
+<rule id="100030" level="12" frequency="5" timeframe="60">
+  <if_matched_sid>60122</if_matched_sid>
+  <same_field>win.eventdata.ipAddress</same_field>
+  <description>HAUT - Brute force RDP : 5 échecs en 60 secondes</description>
+  <mitre>
+    <id>T1110.001</id>
+  </mitre>
+  <group>brute_force,rdp,</group>
+</rule>
+```
+
+---
+
+### Règle 100040 — Mouvement latéral via SMB
+**MITRE** : T1021.002 — Remote Services / SMB/Windows Admin Shares
+**Niveau** : 12 (Haut)
+**Event ID surveillé** : Windows Security Event ID 4648
+
+**Raisonnement** : L'accès aux partages administratifs (`ADMIN$`, `C$`, `IPC$`)
+est une technique classique de mouvement latéral. L'Event ID 4648 indique
+une connexion avec des credentials explicites, ce qui est inhabituel pour
+un accès légitime entre machines du domaine (qui utilisent Kerberos).
+
+```xml
+<rule id="100040" level="12">
+  <if_group>windows</if_group>
+  <field name="win.system.eventID">^4648$</field>
+  <field name="win.eventdata.targetServerName" type="pcre2">(?i)(admin\$|c\$|ipc\$)</field>
+  <description>HAUT - Connexion SMB vers partage administratif (mouvement latéral)</description>
+  <mitre>
+    <id>T1021.002</id>
+  </mitre>
+  <group>lateral_movement,smb,</group>
+</rule>
+```
+
+---
+
+### Règle 100050 — Création de compte suspect
+**MITRE** : T1136.001 — Create Account / Local Account
+**Niveau** : 12 (Haut)
+**Event ID surveillé** : Windows Security Event ID 4720
+
+**Raisonnement** : La création d'un nouveau compte utilisateur en dehors
+des procédures RH normales est un indicateur classique de persistance.
+Un attaquant crée souvent un compte backdoor après avoir obtenu des
+privilèges élevés pour maintenir son accès.
+
+```xml
+<rule id="100050" level="12">
+  <if_group>windows</if_group>
+  <field name="win.system.eventID">^4720$</field>
+  <description>HAUT - Nouveau compte utilisateur créé (persistance possible)</description>
+  <mitre>
+    <id>T1136.001</id>
+  </mitre>
+  <group>persistence,account_creation,</group>
+</rule>
+```
+
+---
+
+## 4. Récapitulatif des règles
+
+| Rule ID | Attaque | MITRE | Niveau | Event ID |
+|---|---|---|---|---|
+| 100001 | Mimikatz (nom processus) | T1003.001 | 15 — Critique | Sysmon 1 |
+| 100002 | Mimikatz (ligne de commande) | T1003.001 | 15 — Critique | Sysmon 1 |
+| 100003 | Accès mémoire LSASS | T1003.001 | 15 — Critique | Sysmon 10 |
+| 100010 | Pass-the-Hash | T1550.002 | 12 — Haut | 4624 |
+| 100020 | Scan réseau (Nmap) | T1046 | 10 — Moyen | — |
+| 100030 | Brute force RDP | T1110.001 | 12 — Haut | 4625 |
+| 100040 | Mouvement latéral SMB | T1021.002 | 12 — Haut | 4648 |
+| 100050 | Création de compte | T1136.001 | 12 — Haut | 4720 |
+
+---
+
+## 5. Vérification dans le Dashboard
+
+**Wazuh Dashboard → Rules → Manage rules → chercher `100001`**
+
+> ![Rule_wazuh](https://raw.githubusercontent.com/samiBlsn/SOC-HomeLab/main/screenshots/etape-5/Rule_Mimikatz.PNG) : Dashboard Wazuh affichant la règle 100001 dans
+> la liste des règles chargées.

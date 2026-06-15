@@ -96,8 +96,8 @@ SOC-HomeLab/
 - [✔] Étape 2 — Configuration réseau VMware & création des VMs
 - [✔] Étape 3 — Active Directory (AD DS, GPO, utilisateurs)
 - [✔] Étape 4 — Installation Wazuh Server
-- [ ] Étape 5 — Déploiement des agents sur les endpoints
-- [ ] Étape 6 — Règles de détection custom
+- [✔] Étape 5 — Déploiement des agents sur les endpoints
+- [✔] Étape 6 — Règles de détection custom
 - [ ] Étape 7 — Simulations d'attaques
 - [ ] Étape 8 — Rapport d'investigation d'incident
 

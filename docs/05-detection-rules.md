@@ -143,31 +143,6 @@ des Event IDs Windows spécifiques.
   <group>credential_access,mimikatz,</group>
 </rule>
 ```
-
----
-
-### Règle 100002 — Mimikatz via ligne de commande
-**MITRE** : T1003.001 — OS Credential Dumping / LSASS Memory
-**Niveau** : 15 (Critique)
-**Event ID surveillé** : Sysmon Event ID 1 (création de processus)
-
-**Raisonnement** : Même si l'attaquant renomme l'exécutable, les commandes
-Mimikatz (`sekurlsa::logonpasswords`, `lsadump::dcsync`, etc.) restent
-identifiables dans la ligne de commande. La regex couvre les modules
-les plus utilisés.
-
-```xml
-<rule id="100002" level="15">
-  <if_group>windows</if_group>
-  <field name="win.eventdata.commandLine" type="pcre2">(?i)(sekurlsa|lsadump|kerberos::|privilege::debug)</field>
-  <description>CRITIQUE - Arguments Mimikatz détectés en ligne de commande</description>
-  <mitre>
-    <id>T1003.001</id>
-  </mitre>
-  <group>credential_access,mimikatz,</group>
-</rule>
-```
-
 ---
 
 ### Règle 100003 — Accès mémoire LSASS

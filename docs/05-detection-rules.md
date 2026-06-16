@@ -28,7 +28,7 @@ visible via l'Event ID 10.
 
 ---
 
-# 1. Installation de Sysmon
+## 1. Installation de Sysmon
 
 Exécuté en **PowerShell 64 bits Administrateur** sur **DC01** et **win10-client** :
 
@@ -54,11 +54,11 @@ Get-Service Sysmon64
 
 ---
 
-# 2. Configuration Wazuh pour collecter les logs Sysmon
+## 2. Configuration Wazuh pour collecter les logs Sysmon
 
-Pour que Wazuh collecte les logs Sysmon et pour éviter de devoir configurer chaque endpoint manuellement nous allons utiliser une configuration partagée.
+Pour que Wazuh collecte les logs Sysmon et pour éviter de devoir configurer chaque endpoint manuellement, nous utilisons une configuration partagée par groupe.
 
-## 2.1 Création du dossier de configuration partagée
+### 2.1 Création du dossier de configuration partagée
 
 Sur **wazuh-server** :
 
@@ -66,17 +66,11 @@ Sur **wazuh-server** :
 mkdir -p /var/ossec/etc/shared/windows
 ```
 
----
-
-## 2.2 Création du fichier agent.conf
-
-Créer le fichier :
+### 2.2 Création du fichier agent.conf
 
 ```bash
 nano /var/ossec/etc/shared/windows/agent.conf
 ```
-
-Ajouter :
 
 ```xml
 <agent_config>
@@ -90,34 +84,23 @@ Ajouter :
 </agent_config>
 ```
 
-Cette configuration indique aux agents Windows de collecter le journal :
+Cette configuration indique aux agents Windows de collecter le journal `Microsoft-Windows-Sysmon/Operational`.
+
+### 2.3 Association des agents Windows au groupe
+
+Dans l'interface Wazuh, créer le groupe "windows" et ajouter les endpoints :
 
 ```
-Microsoft-Windows-Sysmon/Operational
+Management → Groups → Add new group
 ```
 
----
-## 2.3 Association des agents Windows au groupe
+Les agents appartenant au groupe `windows` récupèrent automatiquement `/var/ossec/etc/shared/windows/agent.conf`.
 
-Dans l'interface Wazuh créer le groupe "windows" et ajouter les endpoints:
-
-```
-Management
- └── Groups
-      └── Add new group
-         
-```
-Note: Il est important de garder la cohérence entre le nom du dossier et le groupe.
-
-Les agents appartenant au groupe `windows` récupèrent automatiquement :
-
-```
-/var/ossec/etc/shared/windows/agent.conf
-```
 > ![Groups](https://raw.githubusercontent.com/samiBlsn/SOC-HomeLab/main/screenshots/etape-5/manage_groups.PNG)
 
 ---
-# 3. Règles de détection custom
+
+## 3. Règles de détection custom
 
 Les règles sont définies dans `/var/ossec/etc/rules/local_rules.xml`.
 Chaque règle est mappée à une technique MITRE ATT&CK et surveille
@@ -130,7 +113,9 @@ des Event IDs Windows spécifiques.
 **Niveau** : 15 (Critique)
 **Event ID surveillé** : Sysmon Event ID 1 (création de processus)
 
-**Raisonnement** : Cette règle détecte efficacement les exécutions directes de Mimikatz mais peut être contournée par le renommage de l'exécutable ou l'utilisation d'outils équivalents.
+**Raisonnement** : Cette règle détecte les exécutions directes de Mimikatz via
+son nom de processus. Elle peut être contournée par le renommage de l'exécutable,
+c'est pourquoi elle est combinée avec la règle 100003 pour une détection en profondeur.
 
 ```xml
 <rule id="100001" level="15">
@@ -143,6 +128,7 @@ des Event IDs Windows spécifiques.
   <group>credential_access,mimikatz,</group>
 </rule>
 ```
+
 ---
 
 ### Règle 100003 — Accès mémoire LSASS
@@ -150,12 +136,13 @@ des Event IDs Windows spécifiques.
 **Niveau** : 15 (Critique)
 **Event ID surveillé** : Sysmon Event ID 10 (accès mémoire inter-processus)
 
-**Raisonnement** : C'est la règle la plus robuste contre Mimikatz.
+**Raisonnement** : C'est la règle la plus robuste contre le credential dumping.
 `lsass.exe` stocke les credentials en mémoire. Tout processus qui accède
-à sa mémoire (hors processus système légitimes) est suspect. Sysmon Event ID 10
-est le seul moyen natif de détecter cet accès sans EDR commercial. 
+à sa mémoire hors processus système légitimes est suspect. Sysmon Event ID 10
+est le seul moyen natif de détecter cet accès sans EDR commercial.
 
-Note: Dans un environnement de production, cette règle nécessiterait une liste d'exclusion pour les outils de sécurité autorisés.
+Note : En production, cette règle nécessiterait une liste d'exclusion pour
+les outils de sécurité autorisés (antivirus, EDR) afin de réduire les faux positifs.
 
 ```xml
 <rule id="100003" level="15">
@@ -178,12 +165,12 @@ Note: Dans un environnement de production, cette règle nécessiterait une liste
 **Event ID surveillé** : Windows Security Event ID 4624 (ouverture de session)
 
 **Raisonnement** : Le Pass-the-Hash génère une authentification réseau
-(Logon Type 3) via NTLM. Une authentification NTLM de type réseau provenant
-d'une workstation vers un serveur est légitime dans certains cas, mais devient
-suspecte combinée à d'autres indicateurs (heure inhabituelle, compte sensible).
+(Logon Type 3) via NTLM. Une authentification NTLM de type réseau est légitime
+dans certains cas, mais devient suspecte combinée à d'autres indicateurs
+(heure inhabituelle, compte sensible, corrélation avec d'autres alertes).
 
-Cette règle est volontairement large et doit être corrélée
-avec d'autres indicateurs pour confirmer un véritable Pass-the-Hash.
+Cette règle est volontairement large et doit être corrélée avec d'autres
+indicateurs pour confirmer un véritable Pass-the-Hash.
 
 ```xml
 <rule id="100010" level="12">
@@ -201,29 +188,6 @@ avec d'autres indicateurs pour confirmer un véritable Pass-the-Hash.
 
 ---
 
-### Règle 100020 — Scan réseau
-**MITRE** : T1046 — Network Service Discovery
-**Niveau** : 10 (Moyen)
-**Logique** : 20 tentatives de connexion depuis la même IP en 10 secondes
-
-**Raisonnement** : Un scan Nmap génère des dizaines de tentatives de connexion
-TCP en quelques secondes depuis une même source. La corrélation temporelle
-(frequency + timeframe) permet de distinguer un scan d'un trafic normal.
-
-```xml
-<rule id="100020" level="10" frequency="20" timeframe="10">
-  <if_matched_group>connection_attempt</if_matched_group>
-  <same_field>win.eventdata.sourceAddress</same_field>
-  <description>MOYEN - Scan réseau détecté depuis la même IP source</description>
-  <mitre>
-    <id>T1046</id>
-  </mitre>
-  <group>reconnaissance,network_scan,</group>
-</rule>
-```
-
----
-
 ### Règle 100030 — Brute Force RDP
 **MITRE** : T1110.001 — Brute Force / Password Guessing
 **Niveau** : 12 (Haut)
@@ -234,8 +198,8 @@ génère des Event ID 4625 (échec de connexion) en rafale. Le seuil de 5 échec
 en 60 secondes est suffisamment bas pour détecter une attaque tout en évitant
 les faux positifs liés aux erreurs de frappe normales (1-2 tentatives).
 
-Cette règle s'appuie sur la règle native Wazuh 60122,
-qui détecte les échecs d'authentification Windows (Event ID 4625).
+Cette règle s'appuie sur la règle native Wazuh 60122 qui détecte
+les échecs d'authentification Windows (Event ID 4625).
 
 ```xml
 <rule id="100030" level="12" frequency="5" timeframe="60">
@@ -251,40 +215,16 @@ qui détecte les échecs d'authentification Windows (Event ID 4625).
 
 ---
 
-### Règle 100040 — Mouvement latéral via SMB
-**MITRE** : T1021.002 — Remote Services / SMB/Windows Admin Shares
-**Niveau** : 12 (Haut)
-**Event ID surveillé** : Windows Security Event ID 4648
-
-**Raisonnement** : L'accès aux partages administratifs (`ADMIN$`, `C$`, `IPC$`)
-est une technique classique de mouvement latéral. L'Event ID 4648 indique
-une connexion avec des credentials explicites, ce qui est inhabituel pour
-un accès légitime entre machines du domaine (qui utilisent Kerberos).
-
-```xml
-<rule id="100040" level="12">
-  <if_group>windows</if_group>
-  <field name="win.system.eventID">^4648$</field>
-  <field name="win.eventdata.targetServerName" type="pcre2">(?i)(admin\$|c\$|ipc\$)</field>
-  <description>HAUT - Connexion SMB vers partage administratif (mouvement latéral)</description>
-  <mitre>
-    <id>T1021.002</id>
-  </mitre>
-  <group>lateral_movement,smb,</group>
-</rule>
-```
-
----
-
 ### Règle 100050 — Création de compte suspect
 **MITRE** : T1136.001 — Create Account / Local Account
 **Niveau** : 12 (Haut)
 **Event ID surveillé** : Windows Security Event ID 4720
 
 **Raisonnement** : La création d'un nouveau compte utilisateur en dehors
-des procédures RH normales est un indicateur classique de persistance.
+des procédures normales est un indicateur classique de persistance.
 Un attaquant crée souvent un compte backdoor après avoir obtenu des
-privilèges élevés pour maintenir son accès.
+privilèges élevés pour maintenir son accès même si ses credentials
+initiaux sont révoqués.
 
 ```xml
 <rule id="100050" level="12">
@@ -304,14 +244,11 @@ privilèges élevés pour maintenir son accès.
 
 | Rule ID | Attaque | MITRE | Niveau | Event ID |
 |---|---|---|---|---|
-| 100001 | Mimikatz (nom processus) | T1003.001 | 15 — Critique | Sysmon 1 |
-| 100002 | Mimikatz (ligne de commande) | T1003.001 | 15 — Critique | Sysmon 1 |
+| 100001 | Mimikatz — nom de processus | T1003.001 | 15 — Critique | Sysmon 1 |
 | 100003 | Accès mémoire LSASS | T1003.001 | 15 — Critique | Sysmon 10 |
-| 100010 | Pass-the-Hash | T1550.002 | 12 — Haut | 4624 |
-| 100020 | Scan réseau (Nmap) | T1046 | 10 — Moyen | — |
+| 100010 | Pass-the-Hash NTLM | T1550.002 | 12 — Haut | 4624 |
 | 100030 | Brute force RDP | T1110.001 | 12 — Haut | 4625 |
-| 100040 | Mouvement latéral SMB | T1021.002 | 12 — Haut | 4648 |
-| 100050 | Création de compte | T1136.001 | 12 — Haut | 4720 |
+| 100050 | Création de compte suspect | T1136.001 | 12 — Haut | 4720 |
 
 ---
 
@@ -319,5 +256,4 @@ privilèges élevés pour maintenir son accès.
 
 **Wazuh Dashboard → Rules → Manage rules → chercher `100001`**
 
-> ![Rule_wazuh](https://raw.githubusercontent.com/samiBlsn/SOC-HomeLab/main/screenshots/etape-5/Rule_Mimikatz.PNG) : Dashboard Wazuh affichant la règle 100001 dans
-> la liste des règles chargées.
+> ![Rule_wazuh](https://raw.githubusercontent.com/samiBlsn/SOC-HomeLab/main/screenshots/etape-5/Rule_Mimikatz.PNG) : Dashboard Wazuh affichant la règle 100001 dans la liste des règles chargées.

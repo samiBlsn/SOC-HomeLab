@@ -28,7 +28,7 @@ visible via l'Event ID 10.
 
 ---
 
-## 1. Installation de Sysmon
+# 1. Installation de Sysmon
 
 Exécuté en **PowerShell 64 bits Administrateur** sur **DC01** et **win10-client** :
 
@@ -54,24 +54,70 @@ Get-Service Sysmon64
 
 ---
 
-## 2. Configuration Wazuh pour collecter les logs Sysmon
+# 2. Configuration Wazuh pour collecter les logs Sysmon
 
-Sur **wazuh-server**, ajout du canal Sysmon dans `/var/ossec/etc/ossec.conf` :
+Pour que Wazuh collecte les logs Sysmon et pour éviter de devoir configurer chaque endpoint manuellement nous allons utiliser une configuration partagée.
 
-```xml
-<localfile>
-  <location>Microsoft-Windows-Sysmon/Operational</location>
-  <log_format>eventchannel</log_format>
-</localfile>
-```
+## 2.1 Création du dossier de configuration partagée
+
+Sur **wazuh-server** :
 
 ```bash
-sudo systemctl restart wazuh-manager
+mkdir -p /var/ossec/etc/shared/windows
 ```
 
 ---
 
-## 3. Règles de détection custom
+## 2.2 Création du fichier agent.conf
+
+Créer le fichier :
+
+```bash
+nano /var/ossec/etc/shared/windows/agent.conf
+```
+
+Ajouter :
+
+```xml
+<agent_config>
+
+  <!-- Collecte des événements Sysmon -->
+  <localfile>
+    <location>Microsoft-Windows-Sysmon/Operational</location>
+    <log_format>eventchannel</log_format>
+  </localfile>
+
+</agent_config>
+```
+
+Cette configuration indique aux agents Windows de collecter le journal :
+
+```
+Microsoft-Windows-Sysmon/Operational
+```
+
+---
+## 2.3 Association des agents Windows au groupe
+
+Dans l'interface Wazuh créer le groupe "windows" et ajouter les endpoints:
+
+```
+Management
+ └── Groups
+      └── Add new group
+         
+```
+Note: Il est important de garder la cohérence entre le nom du dossier et le groupe.
+
+Les agents appartenant au groupe `windows` récupèrent automatiquement :
+
+```
+/var/ossec/etc/shared/windows/agent.conf
+```
+> ![Groups](https://raw.githubusercontent.com/samiBlsn/SOC-HomeLab/main/screenshots/etape-5/manage_groups.PNG)
+
+---
+# 3. Règles de détection custom
 
 Les règles sont définies dans `/var/ossec/etc/rules/local_rules.xml`.
 Chaque règle est mappée à une technique MITRE ATT&CK et surveille

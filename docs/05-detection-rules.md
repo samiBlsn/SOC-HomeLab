@@ -26,6 +26,12 @@ Sans Sysmon, Mimikatz peut s'exécuter sans qu'aucun log exploitable ne soit
 généré. Avec Sysmon, l'accès à la mémoire de `lsass.exe` est immédiatement
 visible via l'Event ID 10.
 
+> **Note** : Les événements Sysmon de type NetworkConnect (Event ID 3) dépendent
+> de la configuration Sysmon utilisée. Certaines configurations communautaires,
+> comme SwiftOnSecurity, filtrent une partie des connexions réseau afin de limiter
+> le volume de logs. La détection de scans réseau via Sysmon Event ID 3 peut donc
+> être incomplète selon la configuration appliquée.
+
 ---
 
 ## 1. Installation de Sysmon
@@ -114,8 +120,11 @@ des Event IDs Windows spécifiques.
 **Event ID surveillé** : Sysmon Event ID 1 (création de processus)
 
 **Raisonnement** : Cette règle détecte les exécutions directes de Mimikatz via
-son nom de processus. Elle peut être contournée par le renommage de l'exécutable,
-c'est pourquoi elle est combinée avec la règle 100003 pour une détection en profondeur.
+son nom de processus. Elle est principalement pédagogique et destinée au
+laboratoire. En environnement réel, un attaquant renommera généralement
+l'exécutable afin d'éviter une détection basée sur le nom du fichier.
+C'est pourquoi elle est combinée avec la règle 100003 qui détecte le
+comportement (accès LSASS) plutôt que le nom.
 
 ```xml
 <rule id="100001" level="15">
@@ -141,15 +150,18 @@ c'est pourquoi elle est combinée avec la règle 100003 pour une détection en p
 à sa mémoire hors processus système légitimes est suspect. Sysmon Event ID 10
 est le seul moyen natif de détecter cet accès sans EDR commercial.
 
-Note : En production, cette règle nécessiterait une liste d'exclusion pour
-les outils de sécurité autorisés (antivirus, EDR) afin de réduire les faux positifs.
+La liste d'exclusion (`negate="yes"`) évite les faux positifs générés par les
+processus système Windows qui accèdent légitimement à LSASS. En production,
+cette liste devrait être complétée avec les outils de sécurité autorisés
+(antivirus, EDR).
 
 ```xml
 <rule id="100003" level="15">
   <if_group>windows</if_group>
   <field name="win.system.eventID">^10$</field>
   <field name="win.eventdata.targetImage" type="pcre2">(?i)lsass\.exe</field>
-  <description>CRITIQUE - Accès mémoire LSASS détecté (credential dumping)</description>
+  <field name="win.eventdata.sourceImage" type="pcre2" negate="yes">(?i)(svchost\.exe|wininit\.exe|lsass\.exe|services\.exe|winlogon\.exe|wlms\.exe|csrss\.exe|MsMpEng\.exe|taskmgr\.exe|WmiPrvSE\.exe)</field>
+  <description>CRITIQUE - Accès mémoire LSASS par processus non légitime</description>
   <mitre>
     <id>T1003.001</id>
   </mitre>
@@ -159,18 +171,17 @@ les outils de sécurité autorisés (antivirus, EDR) afin de réduire les faux p
 
 ---
 
-### Règle 100010 — Pass-the-Hash
+### Règle 100010 — Authentification NTLM réseau suspecte
 **MITRE** : T1550.002 — Use Alternate Authentication Material / Pass the Hash
 **Niveau** : 12 (Haut)
 **Event ID surveillé** : Windows Security Event ID 4624 (ouverture de session)
 
-**Raisonnement** : Le Pass-the-Hash génère une authentification réseau
-(Logon Type 3) via NTLM. Une authentification NTLM de type réseau est légitime
-dans certains cas, mais devient suspecte combinée à d'autres indicateurs
-(heure inhabituelle, compte sensible, corrélation avec d'autres alertes).
-
-Cette règle est volontairement large et doit être corrélée avec d'autres
-indicateurs pour confirmer un véritable Pass-the-Hash.
+**Raisonnement** : Cette règle identifie les authentifications réseau NTLM
+(Logon Type 3) pouvant être observées lors d'un Pass-the-Hash. Elle ne permet
+pas à elle seule de confirmer cette technique — une authentification NTLM réseau
+peut être parfaitement légitime dans certains environnements. Elle doit être
+corrélée avec d'autres indicateurs (heure inhabituelle, compte sensible,
+alertes Mimikatz préalables) pour constituer un signal fiable.
 
 ```xml
 <rule id="100010" level="12">
@@ -240,19 +251,212 @@ initiaux sont révoqués.
 
 ---
 
-## 4. Récapitulatif des règles
+### Règle 100060 — PowerShell encodé
+**MITRE** : T1059.001 — Command and Scripting Interpreter / PowerShell
+**Niveau** : 12 (Haut)
+**Event ID surveillé** : Sysmon Event ID 1 (création de processus)
 
-| Rule ID | Attaque | MITRE | Niveau | Event ID |
-|---|---|---|---|---|
-| 100001 | Mimikatz — nom de processus | T1003.001 | 15 — Critique | Sysmon 1 |
-| 100003 | Accès mémoire LSASS | T1003.001 | 15 — Critique | Sysmon 10 |
-| 100010 | Pass-the-Hash NTLM | T1550.002 | 12 — Haut | 4624 |
-| 100030 | Brute force RDP | T1110.001 | 12 — Haut | 4625 |
-| 100050 | Création de compte suspect | T1136.001 | 12 — Haut | 4720 |
+**Raisonnement** : L'encodage base64 des commandes PowerShell est une technique
+d'obfuscation courante pour bypasser les solutions de détection basées sur les
+signatures. Un usage légitime de `-EncodedCommand` existe dans certains scripts
+d'administration, ce qui peut générer des faux positifs dans des environnements
+avec une gestion automatisée importante.
+
+```xml
+<rule id="100060" level="12">
+  <if_group>windows</if_group>
+  <field name="win.system.eventID">^1$</field>
+  <field name="win.eventdata.image" type="pcre2">(?i)powershell</field>
+  <field name="win.eventdata.commandLine" type="pcre2">(?i)(-enc|-encodedcommand|-ec\s)</field>
+  <description>HAUT - PowerShell avec commande encodée détecté (obfuscation possible)</description>
+  <mitre>
+    <id>T1059.001</id>
+  </mitre>
+  <group>execution,powershell,obfuscation,</group>
+</rule>
+```
+
 
 ---
 
-## 5. Vérification dans le Dashboard
+### Règle 100090 — Whoami post-exploitation
+**MITRE** : T1033 — System Owner/User Discovery
+**Niveau** : 10 (Moyen)
+**Event ID surveillé** : Sysmon Event ID 1 (création de processus)
+
+**Raisonnement** : `whoami` est fréquemment utilisé lors des phases de découverte
+post-exploitation afin d'identifier le contexte d'exécution et les privilèges
+disponibles. Isolément cette commande est anodine et légitime en administration
+système — elle doit être corrélée avec d'autres alertes pour constituer un signal
+significatif.
+
+```xml
+<rule id="100090" level="10">
+  <if_group>windows</if_group>
+  <field name="win.system.eventID">^1$</field>
+  <field name="win.eventdata.image" type="pcre2">(?i)whoami\.exe</field>
+  <description>MOYEN - Exécution de whoami détectée (reconnaissance post-exploitation)</description>
+  <mitre>
+    <id>T1033</id>
+  </mitre>
+  <group>discovery,post_exploitation,</group>
+</rule>
+```
+
+---
+
+### Règle 100091 — Création de compte via CLI
+**MITRE** : T1136.001 — Create Account / Local Account
+**Niveau** : 12 (Haut)
+**Event ID surveillé** : Sysmon Event ID 1 (création de processus)
+
+**Raisonnement** : Complète la règle 100050 en détectant la commande
+`net user /add` directement dans la ligne de commande via Sysmon.
+Permet une détection comportementale indépendante de l'Event ID 4720.
+
+```xml
+<rule id="100091" level="12">
+  <if_group>windows</if_group>
+  <field name="win.system.eventID">^1$</field>
+  <field name="win.eventdata.commandLine" type="pcre2">(?i)net\s+user\s+\S+\s+\S+\s+/add</field>
+  <description>HAUT - Création de compte via net user /add détectée</description>
+  <mitre>
+    <id>T1136.001</id>
+  </mitre>
+  <group>persistence,account_creation,</group>
+</rule>
+```
+
+---
+
+### Règle 100092 — Suppression des shadow copies
+**MITRE** : T1490 — Inhibit System Recovery
+**Niveau** : 15 (Critique)
+**Event ID surveillé** : Sysmon Event ID 1 (création de processus)
+
+**Raisonnement** : La suppression des shadow copies est la signature
+caractéristique d'un ransomware — elle empêche la restauration du système
+via les points de restauration Windows. Cette technique est utilisée par
+la quasi-totalité des ransomwares modernes (Ryuk, LockBit, BlackCat).
+
+```xml
+<rule id="100092" level="15">
+  <if_group>windows</if_group>
+  <field name="win.system.eventID">^1$</field>
+  <field name="win.eventdata.commandLine" type="pcre2">(?i)(vssadmin.*delete|wmic.*shadowcopy.*delete|bcdedit.*recoveryenabled)</field>
+  <description>CRITIQUE - Suppression des shadow copies détectée (comportement ransomware)</description>
+  <mitre>
+    <id>T1490</id>
+  </mitre>
+  <group>impact,ransomware,</group>
+</rule>
+```
+
+
+---
+
+### Règle 100094 — Exécution depuis dossier suspect
+**MITRE** : T1059 — Command and Scripting Interpreter
+**Niveau** : 10 (Moyen)
+**Event ID surveillé** : Sysmon Event ID 1 (création de processus)
+
+**Raisonnement** : Les malwares et outils offensifs sont fréquemment déposés
+dans des dossiers temporaires (`%TEMP%`, `Downloads`, `AppData`) avant exécution.
+Un exécutable lancé depuis ces chemins est anormal dans un environnement
+d'entreprise sain.
+
+```xml
+<rule id="100094" level="10">
+  <if_group>windows</if_group>
+  <field name="win.system.eventID">^1$</field>
+  <field name="win.eventdata.image" type="pcre2">(?i)(\\temp\\|\\downloads\\|\\appdata\\local\\temp\\)</field>
+  <description>MOYEN - Exécution depuis un dossier temporaire suspect</description>
+  <mitre>
+    <id>T1059</id>
+  </mitre>
+  <group>execution,suspicious_path,</group>
+</rule>
+```
+
+
+---
+
+### Règle 100095 — Tentative de connexion SSH root (Linux)
+**MITRE** : T1078 — Valid Accounts
+**Niveau** : 10 (Moyen)
+**Source** : Logs SSH Ubuntu (`/var/log/auth.log`)
+
+**Raisonnement** : Cette règle détecte les tentatives de connexion SSH avec
+l'utilisateur root lorsque celui-ci est refusé ou inexistant sur le système.
+La connexion directe en root via SSH est désactivée par défaut sur Ubuntu
+et représente soit une mauvaise configuration soit une tentative d'accès
+non autorisé. Cette règle couvre la détection sur `ubuntu-endpoint` et
+complète la couverture Linux du lab.
+
+```xml
+<rule id="100095" level="10">
+  <if_sid>5501</if_sid>
+  <match>Invalid user root</match>
+  <description>MOYEN - Tentative de connexion SSH avec utilisateur root refusé</description>
+  <mitre>
+    <id>T1078</id>
+  </mitre>
+  <group>authentication,ssh,linux,</group>
+</rule>
+```
+
+
+---
+
+## 4. Récapitulatif des règles
+
+| Rule ID | Attaque | MITRE | Niveau | Event ID | OS |
+|---|---|---|---|---|---|
+| 100001 | Mimikatz — nom de processus | T1003.001 | 15 — Critique | Sysmon 1 | Windows |
+| 100003 | Accès mémoire LSASS | T1003.001 | 15 — Critique | Sysmon 10 | Windows |
+| 100010 | Authentification NTLM réseau | T1550.002 | 12 — Haut | 4624 | Windows |
+| 100030 | Brute force RDP | T1110.001 | 12 — Haut | 4625 | Windows |
+| 100050 | Création de compte (Event) | T1136.001 | 12 — Haut | 4720 | Windows |
+| 100060 | PowerShell encodé | T1059.001 | 12 — Haut | Sysmon 1 | Windows |
+| 100090 | Whoami post-exploitation | T1033 | 10 — Moyen | Sysmon 1 | Windows |
+| 100091 | Création compte via CLI | T1136.001 | 12 — Haut | Sysmon 1 | Windows |
+| 100092 | Shadow copies supprimées | T1490 | 15 — Critique | Sysmon 1 | Windows |
+| 100094 | Exécution dossier suspect | T1059 | 10 — Moyen | Sysmon 1 | Windows |
+| 100095 | SSH root tentative | T1078 | 10 — Moyen | auth.log | Linux |
+
+---
+
+## 5. Tactiques MITRE ATT&CK couvertes
+
+| Tactique | Règles |
+|---|---|
+| Credential Access | 100001, 100003 |
+| Lateral Movement | 100010 |
+| Initial Access | 100030 |
+| Persistence | 100050, 100091 |
+| Execution | 100060, 100090, 100094 |
+| Impact | 100092 |
+| Defense Evasion | 100060 |
+| Discovery | 100090 |
+
+---
+
+## 6. Limites des règles
+
+| Règle | Limite |
+|---|---|
+| 100001 | Contournable par renommage de l'exécutable |
+| 100003 | Dépend de Sysmon Event ID 10 — nécessite une config Sysmon adaptée |
+| 100010 | Peut générer des faux positifs — l'authentification NTLM réseau est légitime dans certains contextes |
+| 100060 | Certaines solutions d'administration utilisent `-EncodedCommand` légitimement |
+| 100090 | Commande légitime en administration système — signal faible isolément |
+| 100092 | Ne couvre pas toutes les variantes de suppression de sauvegardes |
+| 100094 | Peut générer des faux positifs sur des postes de développeurs |
+| 100095 | Détecte uniquement les tentatives root refusées, pas les connexions root réussies |
+
+---
+
+## 7. Vérification dans le Dashboard
 
 **Wazuh Dashboard → Rules → Manage rules → chercher `100001`**
 

@@ -2,8 +2,8 @@
  SOC Home Lab — Wazuh SIEM/EDR, Active Directory, simulation d'attaques MITRE ATT&amp;CK
 # 🛡️ SOC Home Lab — Wazuh SIEM/EDR + Active Directory
 
-![Status](https://img.shields.io/badge/status-in--progress-orange)
-![Wazuh](https://img.shields.io/badge/Wazuh-4.x-blue)
+![Status](https://img.shields.io/badge/status-completed-green)
+![Wazuh](https://img.shields.io/badge/Wazuh-4.7.5-blue)
 ![Windows Server](https://img.shields.io/badge/Windows_Server-2022-0078D4)
 ![MITRE ATT&CK](https://img.shields.io/badge/MITRE_ATT%26CK-mapped-red)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -69,14 +69,10 @@ SOC-HomeLab/
 │   ├── 06-attack-simulations.md  # Mimikatz, PTH, Nmap, Brute force
 │   └── 07-incident-report.md     # Rapport d'investigation complet
 ├── rules/
-│   ├── mimikatz_detection.xml
-│   ├── pass_the_hash.xml
-│   └── lateral_movement.xml
+│   ├── local_rules.xml           # Règles de détéction 
 ├── screenshots/                  # Captures d'écran des alertes Wazuh
 └── scripts/
-    ├── setup-ad.ps1              # Création users, OUs, GPOs (PowerShell)
-    ├── deploy-agent.ps1          # Installation agent Wazuh sur Windows
-    └── attack-sim.sh             # Séquence d'attaques depuis Kali
+
 ```
 
 ---
@@ -98,8 +94,8 @@ SOC-HomeLab/
 - [✔] Étape 4 — Installation Wazuh Server
 - [✔] Étape 5 — Déploiement des agents sur les endpoints
 - [✔] Étape 6 — Règles de détection custom
-- [ ] Étape 7 — Simulations d'attaques
-- [ ] Étape 8 — Rapport d'investigation d'incident
+- [✔] Étape 7 — Simulations d'attaques
+- [✔] Étape 8 — Rapport d'investigation d'incident
 
 ---
 

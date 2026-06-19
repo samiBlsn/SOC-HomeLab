@@ -281,56 +281,6 @@ avec une gestion automatisée importante.
 
 ---
 
-### Règle 100090 — Whoami post-exploitation
-**MITRE** : T1033 — System Owner/User Discovery
-**Niveau** : 10 (Moyen)
-**Event ID surveillé** : Sysmon Event ID 1 (création de processus)
-
-**Raisonnement** : `whoami` est fréquemment utilisé lors des phases de découverte
-post-exploitation afin d'identifier le contexte d'exécution et les privilèges
-disponibles. Isolément cette commande est anodine et légitime en administration
-système — elle doit être corrélée avec d'autres alertes pour constituer un signal
-significatif.
-
-```xml
-<rule id="100090" level="10">
-  <if_group>windows</if_group>
-  <field name="win.system.eventID">^1$</field>
-  <field name="win.eventdata.image" type="pcre2">(?i)whoami\.exe</field>
-  <description>MOYEN - Exécution de whoami détectée (reconnaissance post-exploitation)</description>
-  <mitre>
-    <id>T1033</id>
-  </mitre>
-  <group>discovery,post_exploitation,</group>
-</rule>
-```
-
----
-
-### Règle 100091 — Création de compte via CLI
-**MITRE** : T1136.001 — Create Account / Local Account
-**Niveau** : 12 (Haut)
-**Event ID surveillé** : Sysmon Event ID 1 (création de processus)
-
-**Raisonnement** : Complète la règle 100050 en détectant la commande
-`net user /add` directement dans la ligne de commande via Sysmon.
-Permet une détection comportementale indépendante de l'Event ID 4720.
-
-```xml
-<rule id="100091" level="12">
-  <if_group>windows</if_group>
-  <field name="win.system.eventID">^1$</field>
-  <field name="win.eventdata.commandLine" type="pcre2">(?i)net\s+user\s+\S+\s+\S+\s+/add</field>
-  <description>HAUT - Création de compte via net user /add détectée</description>
-  <mitre>
-    <id>T1136.001</id>
-  </mitre>
-  <group>persistence,account_creation,</group>
-</rule>
-```
-
----
-
 ### Règle 100092 — Suppression des shadow copies
 **MITRE** : T1490 — Inhibit System Recovery
 **Niveau** : 15 (Critique)

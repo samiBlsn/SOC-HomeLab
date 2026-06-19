@@ -293,7 +293,7 @@ Actions effectuées suite à la détection des alertes :
 - Activer Windows Defender Credential Guard sur les endpoints
 
 ### Long terme
-- Implémenter le principe du moindre privilège — limiter les comptes Domain Admin
+- Implémenter le principe du moindre privilège et limiter les comptes Domain Admin
 - Déployer un PAM (Privileged Access Management) pour les comptes administrateurs
 - Mettre en place une segmentation réseau pour limiter le mouvement latéral
 - Intégrer Suricata comme IDS réseau pour détecter les scans et le trafic malveillant

@@ -249,6 +249,8 @@ initiaux sont révoqués.
 </rule>
 ```
 
+Note: La règle 100050 s'appuie sur le même Event ID 4720 que la règle native Wazuh 60109, mais remonte la criticité à niveau 12 et ajoute le mapping MITRE ATT&CK T1136.001 pour faciliter la corrélation et le triage SOC.
+
 ---
 
 ### Règle 100060 — PowerShell encodé

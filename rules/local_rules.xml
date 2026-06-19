@@ -1,0 +1,137 @@
+<!-- SOC HomeLab — Règles de détection custom -->
+<!-- Auteur : SAMI | MITRE ATT&CK mappé -->
+
+<group name="soc-lab,">
+
+  <!-- ============================================================ -->
+  <!-- MIMIKATZ — T1003.001                                         -->
+  <!-- ============================================================ -->
+
+  <rule id="100001" level="15">
+    <if_group>windows</if_group>
+    <field name="win.eventdata.image" type="pcre2">(?i)mimikatz</field>
+    <description>CRITIQUE - Mimikatz détecté via nom de processus</description>
+    <mitre>
+      <id>T1003.001</id>
+    </mitre>
+    <group>credential_access,mimikatz,</group>
+  </rule>
+
+  <rule id="100003" level="15">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^10$</field>
+    <field name="win.eventdata.targetImage" type="pcre2">(?i)lsass\.exe</field>
+    <field name="win.eventdata.sourceImage" type="pcre2" negate="yes">(?i)(svchost\.exe|wininit\.exe|lsass\.exe|services\.exe|winlogon\.exe|wlms\.exe|csrss\.exe|MsMpEng\.exe|taskmgr\.exe|WmiPrvSE\.exe)</field>
+    <description>CRITIQUE - Accès mémoire LSASS par processus non légitime</description>
+    <mitre>
+      <id>T1003.001</id>
+    </mitre>
+    <group>credential_access,lsass,</group>
+  </rule>
+
+  <!-- ============================================================ -->
+  <!-- PASS-THE-HASH — T1550.002                                    -->
+  <!-- ============================================================ -->
+
+  <rule id="100010" level="12">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^4624$</field>
+    <field name="win.eventdata.logonType">^3$</field>
+    <field name="win.eventdata.authenticationPackageName">^NTLM$</field>
+    <description>HAUT - Authentification NTLM réseau suspecte (Pass-the-Hash possible)</description>
+    <mitre>
+      <id>T1550.002</id>
+    </mitre>
+    <group>lateral_movement,pass_the_hash,</group>
+  </rule>
+
+  <!-- ============================================================ -->
+  <!-- BRUTE FORCE RDP — T1110.001                                  -->
+  <!-- ============================================================ -->
+
+  <rule id="100030" level="12" frequency="5" timeframe="60">
+    <if_matched_sid>60122</if_matched_sid>
+    <same_field>win.eventdata.ipAddress</same_field>
+    <description>HAUT - Brute force RDP : 5 échecs en 60 secondes</description>
+    <mitre>
+      <id>T1110.001</id>
+    </mitre>
+    <group>brute_force,rdp,</group>
+  </rule>
+
+  <!-- ============================================================ -->
+  <!-- CRÉATION DE COMPTE — T1136.001                               -->
+  <!-- ============================================================ -->
+
+  <rule id="100050" level="12">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^4720$</field>
+    <description>HAUT - Nouveau compte utilisateur créé (persistance possible)</description>
+    <mitre>
+      <id>T1136.001</id>
+    </mitre>
+    <group>persistence,account_creation,</group>
+  </rule>
+
+  <!-- ============================================================ -->
+  <!-- POWERSHELL ENCODÉ — T1059.001                               -->
+  <!-- ============================================================ -->
+
+  <rule id="100060" level="12">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^1$</field>
+    <field name="win.eventdata.image" type="pcre2">(?i)powershell</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)(-enc|-encodedcommand|-ec\s)</field>
+    <description>HAUT - PowerShell avec commande encodée détecté (obfuscation possible)</description>
+    <mitre>
+      <id>T1059.001</id>
+    </mitre>
+    <group>execution,powershell,obfuscation,</group>
+  </rule>
+
+  <!-- ============================================================ -->
+  <!-- NET USER /ADD — T1136.001                                    -->
+  <!-- ============================================================ -->
+
+  <rule id="100091" level="12">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^1$</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)net\s+user\s+\S+\s+\S+\s+/add</field>
+    <description>HAUT - Création de compte via net user /add détectée</description>
+    <mitre>
+      <id>T1136.001</id>
+    </mitre>
+    <group>persistence,account_creation,</group>
+  </rule>
+
+  <!-- ============================================================ -->
+  <!-- SHADOW COPY SUPPRIMÉE — T1490                               -->
+  <!-- ============================================================ -->
+
+  <rule id="100092" level="15">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^1$</field>
+    <field name="win.eventdata.commandLine" type="pcre2">(?i)(vssadmin.*delete|wmic.*shadowcopy.*delete|bcdedit.*recoveryenabled)</field>
+    <description>CRITIQUE - Suppression des shadow copies (comportement ransomware)</description>
+    <mitre>
+      <id>T1490</id>
+    </mitre>
+    <group>impact,ransomware,</group>
+  </rule>
+
+  <!-- ============================================================ -->
+  <!-- EXÉCUTION DEPUIS DOSSIER SUSPECT                    -->
+  <!-- ============================================================ -->
+
+  <rule id="100094" level="10">
+    <if_group>windows</if_group>
+    <field name="win.system.eventID">^1$</field>
+    <field name="win.eventdata.image" type="pcre2">(?i)(\\temp\\|\\downloads\\|\\appdata\\local\\temp\\)</field>
+    <description>MOYEN - Exécution depuis un dossier temporaire suspect</description>
+    <mitre>
+      <id>T1059</id>
+    </mitre>
+    <group>execution,suspicious_path,</group>
+  </rule>
+
+</group>

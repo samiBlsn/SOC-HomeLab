@@ -346,5 +346,5 @@ Wazuh corrèle automatiquement :
 | Persistence | Create Account | T1136.001 | net user | Windows |
 | Execution | PowerShell | T1059.001 | PowerShell | Windows |
 | Impact | Inhibit System Recovery | T1490 | vssadmin | Windows |
-| Execution | Suspicious Path | T1059 | — | Windows |
+| Execution | Suspicious Path | — | — | Windows |
 | Persistence | Create Account Linux | T1136.001 | useradd | Linux |

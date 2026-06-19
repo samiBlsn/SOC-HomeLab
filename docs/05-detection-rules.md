@@ -333,32 +333,6 @@ d'entreprise sain.
 
 ---
 
-### Règle 100095 — Tentative de connexion SSH root (Linux)
-**MITRE** : T1078 — Valid Accounts
-**Niveau** : 10 (Moyen)
-**Source** : Logs SSH Ubuntu (`/var/log/auth.log`)
-
-**Raisonnement** : Cette règle détecte les tentatives de connexion SSH avec
-l'utilisateur root lorsque celui-ci est refusé ou inexistant sur le système.
-La connexion directe en root via SSH est désactivée par défaut sur Ubuntu
-et représente soit une mauvaise configuration soit une tentative d'accès
-non autorisé. Cette règle couvre la détection sur `ubuntu-endpoint` et
-complète la couverture Linux du lab.
-
-```xml
-<rule id="100095" level="10">
-  <if_sid>5501</if_sid>
-  <match>Invalid user root</match>
-  <description>MOYEN - Tentative de connexion SSH avec utilisateur root refusé</description>
-  <mitre>
-    <id>T1078</id>
-  </mitre>
-  <group>authentication,ssh,linux,</group>
-</rule>
-```
-
-
----
 
 ## 4. Récapitulatif des règles
 
@@ -373,7 +347,6 @@ complète la couverture Linux du lab.
 | 100091 | Création compte via CLI | T1136.001 | 12 — Haut | Sysmon 1 | Windows |
 | 100092 | Shadow copies supprimées | T1490 | 15 — Critique | Sysmon 1 | Windows |
 | 100094 | Exécution dossier suspect | T1059 | 10 — Moyen | Sysmon 1 | Windows |
-| 100095 | SSH root tentative | T1078 | 10 — Moyen | auth.log | Linux |
 
 ---
 
@@ -402,7 +375,6 @@ complète la couverture Linux du lab.
 | 100060 | Certaines solutions d'administration utilisent `-EncodedCommand` légitimement |
 | 100092 | Ne couvre pas toutes les variantes de suppression de sauvegardes |
 | 100094 | Peut générer des faux positifs sur des postes de développeurs |
-| 100095 | Détecte uniquement les tentatives root refusées, pas les connexions root réussies |
 
 ---
 

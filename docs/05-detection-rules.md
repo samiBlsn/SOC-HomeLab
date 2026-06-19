@@ -370,7 +370,6 @@ complète la couverture Linux du lab.
 | 100030 | Brute force RDP | T1110.001 | 12 — Haut | 4625 | Windows |
 | 100050 | Création de compte (Event) | T1136.001 | 12 — Haut | 4720 | Windows |
 | 100060 | PowerShell encodé | T1059.001 | 12 — Haut | Sysmon 1 | Windows |
-| 100090 | Whoami post-exploitation | T1033 | 10 — Moyen | Sysmon 1 | Windows |
 | 100091 | Création compte via CLI | T1136.001 | 12 — Haut | Sysmon 1 | Windows |
 | 100092 | Shadow copies supprimées | T1490 | 15 — Critique | Sysmon 1 | Windows |
 | 100094 | Exécution dossier suspect | T1059 | 10 — Moyen | Sysmon 1 | Windows |
@@ -401,7 +400,6 @@ complète la couverture Linux du lab.
 | 100003 | Dépend de Sysmon Event ID 10 — nécessite une config Sysmon adaptée |
 | 100010 | Peut générer des faux positifs — l'authentification NTLM réseau est légitime dans certains contextes |
 | 100060 | Certaines solutions d'administration utilisent `-EncodedCommand` légitimement |
-| 100090 | Commande légitime en administration système — signal faible isolément |
 | 100092 | Ne couvre pas toutes les variantes de suppression de sauvegardes |
 | 100094 | Peut générer des faux positifs sur des postes de développeurs |
 | 100095 | Détecte uniquement les tentatives root refusées, pas les connexions root réussies |

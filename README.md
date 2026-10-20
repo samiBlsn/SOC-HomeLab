@@ -1,7 +1,7 @@
 # SOC Home Lab — Wazuh / Sysmon / Active Directory
 
 ![Status](https://img.shields.io/badge/status-completed-green)
-![Wazuh](https://img.shields.io/badge/Wazuh-4.x-blue)
+![Wazuh](https://img.shields.io/badge/Wazuh-4.7.5-blue)
 ![Windows Server](https://img.shields.io/badge/Windows_Server-2022-0078D4)
 ![Sysmon](https://img.shields.io/badge/Sysmon-enabled-5C2D91)
 ![MITRE ATT&CK](https://img.shields.io/badge/MITRE_ATT%26CK-mapped-red)
